@@ -1,95 +1,66 @@
 import reflex as rx
+from fastapi import FastAPI
+from starlette.types import ASGIApp, Receive, Scope, Send
+from urllib.parse import parse_qsl, urlencode
 
-from app.states.welcome_state import WelcomeState
+import main as panel_module
+from app.luffy_view import luffy_page
+
+panel_app = panel_module.app
 
 
-def index() -> rx.Component:
-    return rx.el.main(
-        rx.el.div(
-            class_name="welcome-orbit welcome-orbit--top-outer",
-            aria_hidden="true",
-        ),
-        rx.el.div(
-            class_name="welcome-orbit welcome-orbit--top-inner",
-            aria_hidden="true",
-        ),
-        rx.el.div(
-            class_name="welcome-orbit welcome-orbit--bottom-outer",
-            aria_hidden="true",
-        ),
-        rx.el.div(
-            class_name="welcome-orbit welcome-orbit--bottom-inner",
-            aria_hidden="true",
-        ),
-        rx.el.section(
-            rx.el.div(
-                rx.el.span(class_name="welcome-eyebrow-line"),
-                rx.el.span(
-                    "مساحةٌ من الهدوء",
-                    class_name="welcome-eyebrow-text",
-                ),
-                rx.el.span(class_name="h-px w-8 bg-[#87977D]"),
-                class_name="welcome-eyebrow",
-            ),
-            rx.el.div(
-                rx.el.div(
-                    class_name="welcome-emblem-ring welcome-emblem-ring--outer",
-                    aria_hidden="true",
-                ),
-                rx.el.div(
-                    class_name="welcome-emblem-ring welcome-emblem-ring--inner",
-                    aria_hidden="true",
-                ),
-                rx.el.h1(
-                    "سلام",
-                    class_name="welcome-title",
-                ),
-                class_name="welcome-emblem",
-            ),
-            rx.el.div(
-                rx.el.span(class_name="welcome-divider-line"),
-                rx.el.span(class_name="welcome-divider-dot"),
-                rx.el.span(class_name="h-px w-12 bg-[#87977D]/50"),
-                class_name="welcome-divider",
-                aria_hidden="true",
-            ),
-            rx.el.p(
-                WelcomeState.greeting,
-                class_name="welcome-greeting",
-                aria_live="polite",
-            ),
-            rx.el.button(
-                "ابدأ",
-                rx.icon("arrow-left", class_name="welcome-button-icon"),
-                on_click=WelcomeState.begin,
-                type="button",
-                class_name="welcome-button",
-            ),
-            class_name="welcome-content",
-        ),
-        class_name="welcome-page",
-        dir="rtl",
-        lang="ar",
-    )
+# The original panel reads its session cookie from JavaScript for live logs, but
+# that cookie is HttpOnly. Let the browser send the cookie with the socket instead.
+panel_module.PANEL_HTML = panel_module.PANEL_HTML.replace(
+    "  const token = document.cookie.split('; ').find(row => row.startsWith('ren_session='))?.split('=')[1];\n  if(!token) return;\n  logsWS = new WebSocket(`${protocol}//${location.host}/ws/live-logs?token=${token}`);",
+    "  if(!isAuthenticated) return;\n  logsWS = new WebSocket(`${protocol}//${location.host}/ws/live-logs`);",
+)
+
+
+PANEL_PATHS = frozenset({"/login", "/dashboard", "/panel", "/health", "/stats"})
+PANEL_PREFIXES = ("/api/", "/ws/", "/sub/")
+
+
+def integrate_panel(reflex_api: FastAPI) -> ASGIApp:
+    reflex_api.add_event_handler("startup", panel_app.router.startup)
+    reflex_api.add_event_handler("shutdown", panel_app.router.shutdown)
+
+    async def dispatch(scope: Scope, receive: Receive, send: Send) -> None:
+        path = scope.get("path", "")
+        if scope["type"] in ("http", "websocket") and (
+            path in PANEL_PATHS or path.startswith(PANEL_PREFIXES)
+        ):
+            if scope["type"] == "websocket" and path == "/ws/live-logs":
+                # The panel's WS handler expects a token query parameter. Supply it
+                # from the HttpOnly session cookie without revealing it to scripts.
+                cookies = dict(
+                    item.strip().split("=", 1)
+                    for header, value in scope.get("headers", [])
+                    if header.lower() == b"cookie"
+                    for item in value.decode("latin-1").split(";")
+                    if "=" in item
+                )
+                if "ren_session" in cookies:
+                    params = dict(
+                        parse_qsl(
+                            scope.get("query_string", b"").decode("latin-1")
+                        )
+                    )
+                    params["token"] = cookies["ren_session"]
+                    scope = {
+                        **scope,
+                        "query_string": urlencode(params).encode("latin-1"),
+                    }
+            await panel_app(scope, receive, send)
+        else:
+            await reflex_api(scope, receive, send)
+
+    return dispatch
 
 
 app = rx.App(
     theme=rx.theme(appearance="light"),
-    stylesheets=["/welcome.css"],
-    head_components=[
-        rx.el.link(rel="preconnect", href="https://fonts.googleapis.com"),
-        rx.el.link(
-            rel="preconnect", href="https://fonts.gstatic.com", cross_origin=""
-        ),
-        rx.el.link(
-            rel="stylesheet",
-            href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Tajawal:wght@400;500;700&display=swap",
-        ),
-    ],
+    api_transformer=integrate_panel,
 )
-app.add_page(
-    index,
-    route="/",
-    title="سلام | أهلًا بك",
-    description="مساحة هادئة لترحيب دافئ بك.",
-)
+app.add_page(luffy_page, route="/", title="Luffy Panel")
+app.add_page(luffy_page, route="/luffy", title="Luffy Panel")
