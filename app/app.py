@@ -5,7 +5,9 @@ from urllib.parse import parse_qsl, urlencode
 
 import main as panel_module
 from app.luffy_view import luffy_page
+from app.panel_domain import install_domain_ui
 
+install_domain_ui()
 panel_app = panel_module.app
 
 
