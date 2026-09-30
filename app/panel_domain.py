@@ -67,9 +67,55 @@ def valid_public_domain(domain: object) -> bool:
     )
 
 
+def inferred_public_domain(hostname: str | None) -> bool:
+    if not valid_public_domain(hostname):
+        return False
+    try:
+        return ipaddress.IPv4Address(hostname).is_global
+    except ipaddress.AddressValueError:
+        logging.exception("Unexpected error")
+        labels = hostname.lower().split(".")
+        return (
+            len(labels) > 1
+            and labels[-1]
+            not in {
+                "localhost",
+                "testserver",
+                "local",
+                "internal",
+                "private",
+                "lan",
+                "localdomain",
+            }
+            and labels[0] not in {"localhost", "testserver"}
+        )
+
+
 panel.save_db = save_db
 panel.load_db = load_db
 panel.get_domain = get_domain
+
+
+@panel.app.middleware("http")
+async def capture_authenticated_panel_domain(request: Request, call_next):
+    if (
+        not panel.CONFIG["public_domain"]
+        and _original_get_domain().lower() == "localhost"
+    ):
+        hostname = request.url.hostname
+        token = request.cookies.get(panel.SESSION_COOKIE)
+        if (
+            token
+            and inferred_public_domain(hostname)
+            and await panel.is_valid_session(token)
+        ):
+            if (
+                not panel.CONFIG["public_domain"]
+                and _original_get_domain().lower() == "localhost"
+            ):
+                panel.CONFIG["public_domain"] = hostname.lower()
+                panel.save_db()
+    return await call_next(request)
 
 
 @panel.app.get("/api/domain")
