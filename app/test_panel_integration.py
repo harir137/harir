@@ -6,8 +6,39 @@ from starlette.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from app.app import integrate_panel
+from app.luffy_view import luffy_page
 import main as panel_module
 import logging
+
+
+def test_root_panel_redirects_to_backend_login() -> None:
+    page = luffy_page()
+    script = page.children[0]
+    script_text = str(script.render())
+    link = page.children[2].children[3]
+    href = link.to
+
+    assert "window.location.replace" in script_text
+    assert "window.location.protocol" in script_text
+    assert "backendHost" in script_text
+    assert "/login" in script_text
+    assert "/^8080-/" in script_text
+    assert "8000-" in script_text
+    assert "/:8080$/" in script_text
+    assert ":8000" in script_text
+    assert "iframe" not in str(page.render()).lower()
+    assert isinstance(href, rx.Var)
+    assert 'replaceAll("/_upload/login", "/login")' in str(href)
+    assert 'replaceAll("://8080-", "://8000-")' in str(href)
+    assert str(href).index('replaceAll("/_upload/login", "/login")') < str(
+        href
+    ).index('replaceAll("://8080-", "://8000-")')
+    assert "<reflex.Var>" not in str(href)
+
+    with TestClient(integrate_panel(FastAPI())) as client:
+        login = client.get("/login")
+        assert login.status_code == 200
+        assert "Luffy Panel" in login.text
 
 
 def test_real_panel_routes() -> None:
