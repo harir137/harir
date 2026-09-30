@@ -1,0 +1,263 @@
+.welcome-page,
+.welcome-page * {
+  box-sizing: border-box;
+}
+
+.welcome-page {
+  position: relative;
+  display: flex;
+  width: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background-color: #f8f6ef;
+  color: #303929;
+  font-family: 'Tajawal', sans-serif;
+  direction: rtl;
+}
+
+.welcome-orbit {
+  position: absolute;
+  z-index: 0;
+  border: 1px solid rgba(135, 151, 125, 0.2);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.welcome-orbit--top-outer {
+  top: -112px;
+  left: -96px;
+  width: 288px;
+  height: 288px;
+}
+
+.welcome-orbit--top-inner {
+  top: -48px;
+  left: -32px;
+  width: 192px;
+  height: 192px;
+  border-color: rgba(135, 151, 125, 0.15);
+}
+
+.welcome-orbit--bottom-outer {
+  right: -128px;
+  bottom: -160px;
+  width: 320px;
+  height: 320px;
+}
+
+.welcome-orbit--bottom-inner {
+  right: -56px;
+  bottom: -80px;
+  width: 208px;
+  height: 208px;
+  border-color: rgba(135, 151, 125, 0.15);
+}
+
+.welcome-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: 100%;
+  max-width: 672px;
+  flex-direction: column;
+  align-items: center;
+  padding: 80px 24px;
+  text-align: center;
+}
+
+.welcome-eyebrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 32px;
+}
+
+.welcome-eyebrow-line {
+  display: block;
+  width: 32px;
+  height: 1px;
+  background-color: #87977d;
+}
+
+.welcome-eyebrow-text {
+  color: #66735f;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.025em;
+  white-space: nowrap;
+}
+
+.welcome-emblem {
+  position: relative;
+  display: flex;
+  width: 224px;
+  height: 224px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+}
+
+.welcome-emblem-ring {
+  position: absolute;
+  border: 1px solid rgba(135, 151, 125, 0.25);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.welcome-emblem-ring--outer {
+  inset: 0;
+}
+
+.welcome-emblem-ring--inner {
+  inset: 12px;
+  border-color: rgba(135, 151, 125, 0.15);
+}
+
+.welcome-title {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  color: #303929;
+  font-family: 'Amiri', serif;
+  font-size: 104px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.welcome-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.welcome-divider-line {
+  display: block;
+  width: 48px;
+  height: 1px;
+  background-color: rgba(135, 151, 125, 0.5);
+}
+
+.welcome-divider-dot {
+  display: block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #87977d;
+}
+
+.welcome-greeting {
+  width: 100%;
+  max-width: 576px;
+  min-height: 64px;
+  margin: 32px 0 0;
+  color: #52604b;
+  font-size: 20px;
+  font-weight: 400;
+  line-height: 1.65;
+  overflow-wrap: break-word;
+}
+
+.welcome-button {
+  display: inline-flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 32px;
+  padding: 12px 36px;
+  border: 0;
+  border-radius: 999px;
+  background-color: #303929;
+  color: #f8f6ef;
+  cursor: pointer;
+  font-family: 'Tajawal', sans-serif;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.5;
+  text-decoration: none;
+  transition: background-color 160ms ease;
+}
+
+.welcome-button:hover {
+  background-color: #4b5943;
+}
+
+.welcome-button:active {
+  background-color: #253020;
+}
+
+.welcome-button:focus-visible {
+  outline: 2px solid #66735f;
+  outline-offset: 4px;
+}
+
+.welcome-button-icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+@media (min-width: 640px) {
+  .welcome-orbit--top-outer {
+    width: 448px;
+    height: 448px;
+  }
+
+  .welcome-orbit--top-inner {
+    width: 320px;
+    height: 320px;
+  }
+
+  .welcome-orbit--bottom-outer {
+    width: 512px;
+    height: 512px;
+  }
+
+  .welcome-orbit--bottom-inner {
+    width: 368px;
+    height: 368px;
+  }
+
+  .welcome-content {
+    padding-right: 40px;
+    padding-left: 40px;
+  }
+
+  .welcome-eyebrow {
+    margin-bottom: 40px;
+  }
+
+  .welcome-emblem {
+    width: 288px;
+    height: 288px;
+  }
+
+  .welcome-title {
+    font-size: 144px;
+  }
+
+  .welcome-divider {
+    margin-top: 32px;
+  }
+
+  .welcome-greeting {
+    margin-top: 40px;
+    font-size: 24px;
+  }
+
+  .welcome-button {
+    margin-top: 40px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .welcome-button {
+    transition: none;
+  }
+}

@@ -10,7 +10,14 @@ from datetime import datetime, timezone, timedelta
 from urllib.parse import quote
 from collections import deque, defaultdict
 
-from fastapi import FastAPI, Request, HTTPException, WebSocket, WebSocketDisconnect, Depends
+from fastapi import (
+    FastAPI,
+    Request,
+    HTTPException,
+    WebSocket,
+    WebSocketDisconnect,
+    Depends,
+)
 from fastapi.responses import Response, HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
@@ -22,12 +29,16 @@ try:
     import telebot
     from telebot.async_telebot import AsyncTeleBot
     from telebot import types
+
     TELEBOT_AVAILABLE = True
 except ImportError:
     TELEBOT_AVAILABLE = False
-    print("WARNING: Please install pyTelegramBotAPI to enable the Telegram Bot: pip install pyTelegramBotAPI")
+    print(
+        "WARNING: Please install pyTelegramBotAPI to enable the Telegram Bot: pip install pyTelegramBotAPI"
+    )
 
 log_queue = deque(maxlen=150)
+
 
 class QueueHandler(logging.Handler):
     def emit(self, record):
@@ -37,11 +48,16 @@ class QueueHandler(logging.Handler):
         except Exception:
             pass
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+)
 logger = logging.getLogger("Luffy-Gateway")
 
 q_handler = QueueHandler()
-q_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
+q_handler.setFormatter(
+    logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+)
 logger.addHandler(q_handler)
 logging.getLogger("uvicorn.error").addHandler(q_handler)
 logging.getLogger("uvicorn.access").addHandler(q_handler)
@@ -56,13 +72,24 @@ CONFIG = {
     "bot_lang": "en",
 }
 
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 connections: dict = {}
 connections_lock = asyncio.Lock()
 connection_sockets: dict = {}
 link_ip_map: dict = defaultdict(set)
-stats = {"total_bytes": 0, "total_requests": 0, "total_errors": 0, "start_time": time.time()}
+stats = {
+    "total_bytes": 0,
+    "total_requests": 0,
+    "total_errors": 0,
+    "start_time": time.time(),
+}
 error_logs: deque = deque(maxlen=50)
 hourly_traffic: dict = defaultdict(int)
 daily_traffic: dict = defaultdict(int)
@@ -254,16 +281,25 @@ BOT_I18N = {
     },
 }
 
+
 def bot_lang() -> str:
-    return CONFIG.get("bot_lang") if CONFIG.get("bot_lang") in ("en", "fa") else "en"
+    return (
+        CONFIG.get("bot_lang")
+        if CONFIG.get("bot_lang") in ("en", "fa")
+        else "en"
+    )
+
 
 def L(key: str, **kwargs) -> str:
     lang = bot_lang()
-    template = BOT_I18N.get(lang, BOT_I18N["en"]).get(key) or BOT_I18N["en"].get(key, key)
+    template = BOT_I18N.get(lang, BOT_I18N["en"]).get(key) or BOT_I18N[
+        "en"
+    ].get(key, key)
     try:
         return template.format(**kwargs)
     except Exception:
         return template
+
 
 def build_main_keyboard():
     if not TELEBOT_AVAILABLE:
@@ -273,11 +309,18 @@ def build_main_keyboard():
         types.InlineKeyboardButton(L("btn_stats"), callback_data="tg_stats"),
         types.InlineKeyboardButton(L("btn_users"), callback_data="tg_users"),
         types.InlineKeyboardButton(L("btn_top"), callback_data="tg_top"),
-        types.InlineKeyboardButton(L("btn_create"), callback_data="tg_create_guide"),
-        types.InlineKeyboardButton(L("btn_addip"), callback_data="tg_add_ip_guide"),
-        types.InlineKeyboardButton(L("btn_lang"), callback_data="tg_lang_toggle"),
+        types.InlineKeyboardButton(
+            L("btn_create"), callback_data="tg_create_guide"
+        ),
+        types.InlineKeyboardButton(
+            L("btn_addip"), callback_data="tg_add_ip_guide"
+        ),
+        types.InlineKeyboardButton(
+            L("btn_lang"), callback_data="tg_lang_toggle"
+        ),
     )
     return kb
+
 
 # ── Database Storage (JSON DB) ────────────────────────────────────────────────
 def save_db():
@@ -295,6 +338,7 @@ def save_db():
     except Exception as e:
         logger.error(f"Error saving DB: {e}")
 
+
 def load_db():
     global CUSTOM_ADDRESSES, LINKS
     if not os.path.exists(DB_FILE):
@@ -306,26 +350,36 @@ def load_db():
         LINKS.clear()
         LINKS.update(data.get("links", {}))
         CUSTOM_ADDRESSES.clear()
-        CUSTOM_ADDRESSES.extend(data.get("custom_addresses", ["www.speedtest.net"]))
+        CUSTOM_ADDRESSES.extend(
+            data.get("custom_addresses", ["www.speedtest.net"])
+        )
         CONFIG["telegram_token"] = data.get("telegram_token", "")
         CONFIG["telegram_admin_id"] = data.get("telegram_admin_id", "")
-        CONFIG["bot_lang"] = data.get("bot_lang", "en") if data.get("bot_lang") in ("en", "fa") else "en"
+        CONFIG["bot_lang"] = (
+            data.get("bot_lang", "en")
+            if data.get("bot_lang") in ("en", "fa")
+            else "en"
+        )
     except Exception as e:
         logger.error(f"Error loading DB: {e}")
+
 
 # ── Auth ─────────────────────────────────────────────────────────────────────
 def hash_password(pw: str) -> str:
     return hashlib.sha256(f"{pw}{CONFIG['secret']}".encode()).hexdigest()
 
+
 AUTH = {"password_hash": hash_password("admin")}
 SESSIONS: dict = {}
 SESSIONS_LOCK = asyncio.Lock()
+
 
 async def create_session() -> str:
     token = secrets.token_urlsafe(32)
     async with SESSIONS_LOCK:
         SESSIONS[token] = time.time() + SESSION_TTL
     return token
+
 
 async def is_valid_session(token: str | None) -> bool:
     if not token:
@@ -337,16 +391,19 @@ async def is_valid_session(token: str | None) -> bool:
             return False
         return True
 
+
 async def destroy_session(token: str | None):
     if token:
         async with SESSIONS_LOCK:
             SESSIONS.pop(token, None)
+
 
 async def require_auth(request: Request):
     token = request.cookies.get(SESSION_COOKIE)
     if not await is_valid_session(token):
         raise HTTPException(status_code=401, detail="unauthorized")
     return token
+
 
 # ── Keep-alive ────────────────────────────────────────────────────────────────
 async def keep_alive():
@@ -360,17 +417,21 @@ async def keep_alive():
         except Exception:
             pass
 
+
 @app.on_event("startup")
 async def startup():
     global http_client
     load_db()
     limits = httpx.Limits(max_connections=500, max_keepalive_connections=100)
     timeout = httpx.Timeout(30.0, connect=10.0)
-    http_client = httpx.AsyncClient(limits=limits, timeout=timeout, follow_redirects=True)
+    http_client = httpx.AsyncClient(
+        limits=limits, timeout=timeout, follow_redirects=True
+    )
     asyncio.create_task(keep_alive())
     await restart_telegram_bot()
     asyncio.create_task(telegram_notifier_cron())
     await ensure_default_link()
+
 
 @app.on_event("shutdown")
 async def shutdown():
@@ -378,36 +439,56 @@ async def shutdown():
     if http_client:
         await http_client.aclose()
 
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def get_domain() -> str:
     return (
-        os.environ.get("RENDER_EXTERNAL_URL", os.environ.get("RAILWAY_PUBLIC_DOMAIN", "localhost"))
-        .replace("https://", "").replace("http://", "")
+        os.environ.get(
+            "RENDER_EXTERNAL_URL",
+            os.environ.get("RAILWAY_PUBLIC_DOMAIN", "localhost"),
+        )
+        .replace("https://", "")
+        .replace("http://", "")
     )
 
-def generate_vless_link(uuid: str, remark: str = "Luffy", address: str = None, port: int = None) -> str:
+
+def generate_vless_link(
+    uuid: str, remark: str = "Luffy", address: str = None, port: int = None
+) -> str:
     domain = get_domain()
     addr = address if address else domain
     use_port = port if port else DEFAULT_PORT
     path = f"/ws/{uuid}"
     params = {
-        "encryption": "none", "security": "tls", "type": "ws",
-        "host": domain, "path": path, "sni": domain, "fp": "chrome", "alpn": "http/1.1"
+        "encryption": "none",
+        "security": "tls",
+        "type": "ws",
+        "host": domain,
+        "path": path,
+        "sni": domain,
+        "fp": "chrome",
+        "alpn": "http/1.1",
     }
-    query = "&".join(f"{k}={quote(str(v))}" for k, v in params.items())
+    query = "&".join(f"{k}={quote(v)}" for k, v in params.items())
     return f"vless://{uuid}@{addr}:{use_port}?{query}#{quote(remark)}"
+
 
 def uptime() -> str:
     secs = int(time.time() - stats["start_time"])
     h, m, s = secs // 3600, (secs % 3600) // 60, secs % 60
     return f"{h:02d}:{m:02d}:{s:02d}"
 
+
 def parse_size_to_bytes(value: float, unit: str) -> int:
     unit = unit.upper()
-    if unit == "GB": return int(value * 1024 * 1024 * 1024)
-    if unit == "MB": return int(value * 1024 * 1024)
-    if unit == "KB": return int(value * 1024)
+    if unit == "GB":
+        return int(value * 1024 * 1024 * 1024)
+    if unit == "MB":
+        return int(value * 1024 * 1024)
+    if unit == "KB":
+        return int(value * 1024)
     return int(value)
+
 
 def parse_expires_at(raw: str | None) -> datetime | None:
     if not raw:
@@ -421,12 +502,14 @@ def parse_expires_at(raw: str | None) -> datetime | None:
     except Exception:
         return None
 
+
 def seconds_until_expiry(expires_at_str: str | None) -> int | None:
     exp = parse_expires_at(expires_at_str)
     if exp is None:
         return None
     remaining = (exp - datetime.now(timezone.utc)).total_seconds()
     return max(0, int(remaining))
+
 
 async def ensure_default_link():
     async with LINKS_LOCK:
@@ -442,6 +525,7 @@ async def ensure_default_link():
                 "ports": [DEFAULT_PORT],
             }
 
+
 def get_client_ip(websocket: WebSocket) -> str:
     forwarded = websocket.headers.get("x-forwarded-for")
     if forwarded:
@@ -450,9 +534,13 @@ def get_client_ip(websocket: WebSocket) -> str:
         return websocket.client.host
     return "unknown"
 
+
 async def count_connections_for_link(uid: str) -> int:
     async with connections_lock:
-        return sum(1 for info in connections.values() if info.get("uuid") == uid)
+        return sum(
+            1 for info in connections.values() if info.get("uuid") == uid
+        )
+
 
 async def remove_ip_from_link(uid: str, ip: str):
     async with connections_lock:
@@ -461,9 +549,12 @@ async def remove_ip_from_link(uid: str, ip: str):
             if not link_ip_map[uid]:
                 link_ip_map.pop(uid, None)
 
+
 async def close_connections_for_link(uid: str):
     async with connections_lock:
-        to_close = [cid for cid, info in connections.items() if info.get("uuid") == uid]
+        to_close = [
+            cid for cid, info in connections.items() if info.get("uuid") == uid
+        ]
     for cid in to_close:
         ws = connection_sockets.get(cid)
         if ws:
@@ -477,6 +568,7 @@ async def close_connections_for_link(uid: str):
     async with connections_lock:
         link_ip_map.pop(uid, None)
 
+
 # ── Telegram Bot Engine ───────────────────────────────────────────────────────
 def _is_admin_chat(chat_id, admin_id) -> bool:
     if str(chat_id) != str(admin_id):
@@ -486,6 +578,7 @@ def _is_admin_chat(chat_id, admin_id) -> bool:
         )
         return False
     return True
+
 
 async def _stop_telegram_bot():
     """Stop any previously running bot/poller before starting a new one.
@@ -509,10 +602,13 @@ async def _stop_telegram_bot():
     bot = None
     bot_polling_task = None
 
+
 async def restart_telegram_bot():
     global bot, bot_polling_task
     if not TELEBOT_AVAILABLE:
-        logger.warning("Telegram Bot is disabled because pyTelegramBotAPI library is not installed.")
+        logger.warning(
+            "Telegram Bot is disabled because pyTelegramBotAPI library is not installed."
+        )
         return
 
     await _stop_telegram_bot()
@@ -526,20 +622,30 @@ async def restart_telegram_bot():
     logger.info("Restarting Telegram Bot with official library...")
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            await client.get(f"https://api.telegram.org/bot{token}/deleteWebhook?drop_pending_updates=true")
-            me_resp = await client.get(f"https://api.telegram.org/bot{token}/getMe")
+            await client.get(
+                f"https://api.telegram.org/bot{token}/deleteWebhook?drop_pending_updates=true"
+            )
+            me_resp = await client.get(
+                f"https://api.telegram.org/bot{token}/getMe"
+            )
             me_data = me_resp.json()
             if not me_data.get("ok"):
-                logger.error(f"Telegram Bot: token rejected by Telegram ({me_data.get('description')}). Bot NOT started.")
+                logger.error(
+                    f"Telegram Bot: token rejected by Telegram ({me_data.get('description')}). Bot NOT started."
+                )
                 return
-            logger.info(f"Telegram Bot: token verified, connected as @{me_data['result'].get('username')}")
+            logger.info(
+                f"Telegram Bot: token verified, connected as @{me_data['result'].get('username')}"
+            )
     except Exception as e:
-        logger.error(f"Telegram Bot: could not reach Telegram API, bot NOT started: {e}")
+        logger.error(
+            f"Telegram Bot: could not reach Telegram API, bot NOT started: {e}"
+        )
         return
 
     bot = AsyncTeleBot(token)
 
-    @bot.message_handler(commands=['start'])
+    @bot.message_handler(commands=["start"])
     async def cmd_start(message):
         if not _is_admin_chat(message.chat.id, admin_id):
             return
@@ -547,59 +653,61 @@ async def restart_telegram_bot():
             message.chat.id,
             L("welcome"),
             parse_mode="HTML",
-            reply_markup=build_main_keyboard()
+            reply_markup=build_main_keyboard(),
         )
 
-    @bot.message_handler(commands=['stats'])
+    @bot.message_handler(commands=["stats"])
     async def cmd_stats(message):
         if not _is_admin_chat(message.chat.id, admin_id):
             return
         s_data = await get_internal_stats()
-        await bot.send_message(message.chat.id, make_stats_text(s_data), parse_mode="HTML")
+        await bot.send_message(
+            message.chat.id, make_stats_text(s_data), parse_mode="HTML"
+        )
 
-    @bot.message_handler(commands=['users'])
+    @bot.message_handler(commands=["users"])
     async def cmd_users(message):
         if not _is_admin_chat(message.chat.id, admin_id):
             return
         utext = await make_users_text()
         await bot.send_message(message.chat.id, utext, parse_mode="HTML")
 
-    @bot.message_handler(commands=['top'])
+    @bot.message_handler(commands=["top"])
     async def cmd_top(message):
         if not _is_admin_chat(message.chat.id, admin_id):
             return
         utext = await make_top_users_text()
         await bot.send_message(message.chat.id, utext, parse_mode="HTML")
 
-    @bot.message_handler(commands=['create'])
+    @bot.message_handler(commands=["create"])
     async def cmd_create(message):
         if not _is_admin_chat(message.chat.id, admin_id):
             return
         resp = await handle_create_command(message.text)
         await bot.send_message(message.chat.id, resp, parse_mode="HTML")
 
-    @bot.message_handler(commands=['addaddr'])
+    @bot.message_handler(commands=["addaddr"])
     async def cmd_addaddr(message):
         if not _is_admin_chat(message.chat.id, admin_id):
             return
         resp = await handle_addaddr_command(message.text)
         await bot.send_message(message.chat.id, resp, parse_mode="HTML")
 
-    @bot.message_handler(commands=['disable'])
+    @bot.message_handler(commands=["disable"])
     async def cmd_disable(message):
         if not _is_admin_chat(message.chat.id, admin_id):
             return
         resp = await handle_toggle_command(message.text, False)
         await bot.send_message(message.chat.id, resp, parse_mode="HTML")
 
-    @bot.message_handler(commands=['enable'])
+    @bot.message_handler(commands=["enable"])
     async def cmd_enable(message):
         if not _is_admin_chat(message.chat.id, admin_id):
             return
         resp = await handle_toggle_command(message.text, True)
         await bot.send_message(message.chat.id, resp, parse_mode="HTML")
 
-    @bot.message_handler(commands=['reset'])
+    @bot.message_handler(commands=["reset"])
     async def cmd_reset(message):
         if not _is_admin_chat(message.chat.id, admin_id):
             return
@@ -615,20 +723,50 @@ async def restart_telegram_bot():
         if call.data == "tg_lang_toggle":
             CONFIG["bot_lang"] = "fa" if bot_lang() == "en" else "en"
             save_db()
-            await bot.send_message(call.message.chat.id, L("lang_switched"), parse_mode="HTML", reply_markup=build_main_keyboard())
+            await bot.send_message(
+                call.message.chat.id,
+                L("lang_switched"),
+                parse_mode="HTML",
+                reply_markup=build_main_keyboard(),
+            )
         elif call.data == "tg_stats":
             s_data = await get_internal_stats()
-            await bot.send_message(call.message.chat.id, make_stats_text(s_data), parse_mode="HTML", reply_markup=build_main_keyboard())
+            await bot.send_message(
+                call.message.chat.id,
+                make_stats_text(s_data),
+                parse_mode="HTML",
+                reply_markup=build_main_keyboard(),
+            )
         elif call.data == "tg_users":
             utext = await make_users_text()
-            await bot.send_message(call.message.chat.id, utext, parse_mode="HTML", reply_markup=build_main_keyboard())
+            await bot.send_message(
+                call.message.chat.id,
+                utext,
+                parse_mode="HTML",
+                reply_markup=build_main_keyboard(),
+            )
         elif call.data == "tg_top":
             utext = await make_top_users_text()
-            await bot.send_message(call.message.chat.id, utext, parse_mode="HTML", reply_markup=build_main_keyboard())
+            await bot.send_message(
+                call.message.chat.id,
+                utext,
+                parse_mode="HTML",
+                reply_markup=build_main_keyboard(),
+            )
         elif call.data == "tg_create_guide":
-            await bot.send_message(call.message.chat.id, L("create_guide"), parse_mode="HTML", reply_markup=build_main_keyboard())
+            await bot.send_message(
+                call.message.chat.id,
+                L("create_guide"),
+                parse_mode="HTML",
+                reply_markup=build_main_keyboard(),
+            )
         elif call.data == "tg_add_ip_guide":
-            await bot.send_message(call.message.chat.id, L("addip_guide"), parse_mode="HTML", reply_markup=build_main_keyboard())
+            await bot.send_message(
+                call.message.chat.id,
+                L("addip_guide"),
+                parse_mode="HTML",
+                reply_markup=build_main_keyboard(),
+            )
 
     async def _run_polling(bot_instance):
         try:
@@ -640,10 +778,13 @@ async def restart_telegram_bot():
             # deleteWebhook?drop_pending_updates=true, so this isn't needed.
             await bot_instance.infinity_polling()
         except Exception as e:
-            logger.error(f"Telegram Bot: polling loop stopped unexpectedly: {e}")
+            logger.error(
+                f"Telegram Bot: polling loop stopped unexpectedly: {e}"
+            )
 
     bot_polling_task = asyncio.create_task(_run_polling(bot))
     logger.info("Telegram Bot is now polling for updates.")
+
 
 async def send_tg_message(text: str):
     global bot
@@ -653,6 +794,7 @@ async def send_tg_message(text: str):
             await bot.send_message(admin_id, text, parse_mode="HTML")
         except Exception as e:
             logger.error(f"Error sending TG notification: {e}")
+
 
 def fmt_exp_py(ea: str | None) -> str:
     if not ea:
@@ -673,6 +815,7 @@ def fmt_exp_py(ea: str | None) -> str:
     minutes = int(seconds // 60)
     return f"{minutes}m"
 
+
 async def get_internal_stats():
     async with connections_lock:
         conn_count = len(connections)
@@ -688,6 +831,7 @@ async def get_internal_stats():
         "memory_percent": psutil.virtual_memory().percent,
     }
 
+
 def make_stats_text(s_data) -> str:
     return L(
         "stats",
@@ -700,6 +844,7 @@ def make_stats_text(s_data) -> str:
         links=s_data.get("links_count", 0),
     )
 
+
 async def make_users_text() -> str:
     lines = [L("users_title")]
     async with LINKS_LOCK:
@@ -710,12 +855,24 @@ async def make_users_text() -> str:
 
     for uid, data in items:
         used = _fmt_bytes(data["used_bytes"])
-        limit = _fmt_bytes(data["limit_bytes"]) if data["limit_bytes"] > 0 else "∞"
+        limit = (
+            _fmt_bytes(data["limit_bytes"]) if data["limit_bytes"] > 0 else "∞"
+        )
         ex = fmt_exp_py(data.get("expires_at"))
         status = L("status_on") if data["active"] else L("status_off")
-        lines.append(L("users_line", label=data['label'], used=used, limit=limit, exp=ex, status=status))
+        lines.append(
+            L(
+                "users_line",
+                label=data["label"],
+                used=used,
+                limit=limit,
+                exp=ex,
+                status=status,
+            )
+        )
 
     return "\n".join(lines[:35])
+
 
 async def make_top_users_text() -> str:
     lines = [L("top_title")]
@@ -724,19 +881,26 @@ async def make_top_users_text() -> str:
     if not items:
         return L("no_inbounds")
 
-    sorted_items = sorted(items, key=lambda x: x[1].get("used_bytes", 0), reverse=True)[:5]
+    sorted_items = sorted(
+        items, key=lambda x: x[1].get("used_bytes", 0), reverse=True
+    )[:5]
     for i, (uid, data) in enumerate(sorted_items, 1):
         used = _fmt_bytes(data["used_bytes"])
-        limit = _fmt_bytes(data["limit_bytes"]) if data["limit_bytes"] > 0 else "∞"
-        lines.append(L("top_line", i=i, label=data['label'], used=used, limit=limit))
+        limit = (
+            _fmt_bytes(data["limit_bytes"]) if data["limit_bytes"] > 0 else "∞"
+        )
+        lines.append(
+            L("top_line", i=i, label=data["label"], used=used, limit=limit)
+        )
     return "\n".join(lines)
+
 
 async def handle_create_command(text: str):
     parts = text.split()
     if len(parts) < 2:
         return L("create_format")
     label = parts[1]
-    if not re.match(r'^[a-zA-Z0-9\-_. ]+$', label):
+    if not re.match(r"^[a-zA-Z0-9\-_. ]+$", label):
         return L("create_bad_name")
 
     limit_value = 0.0
@@ -758,10 +922,14 @@ async def handle_create_command(text: str):
         if label in LINKS:
             return L("create_exists", label=label)
 
-    limit_bytes = 0 if limit_value <= 0 else parse_size_to_bytes(limit_value, "GB")
+    limit_bytes = (
+        0 if limit_value <= 0 else parse_size_to_bytes(limit_value, "GB")
+    )
     expires_at = None
     if days_valid > 0:
-        expires_at = (datetime.now(timezone.utc) + timedelta(days=days_valid)).isoformat()
+        expires_at = (
+            datetime.now(timezone.utc) + timedelta(days=days_valid)
+        ).isoformat()
 
     uid = label
     async with LINKS_LOCK:
@@ -776,24 +944,32 @@ async def handle_create_command(text: str):
         }
 
     save_db()
-    vless_link = generate_vless_link(uid, remark=f"Luffy-{label}", port=DEFAULT_PORT)
+    vless_link = generate_vless_link(
+        uid, remark=f"Luffy-{label}", port=DEFAULT_PORT
+    )
     sub_url = f"https://{get_domain()}/sub/{uid}"
 
     quota_str = _fmt_bytes(limit_bytes) if limit_bytes > 0 else L("unlimited")
-    expiry_str = L("days_fmt", days=days_valid) if days_valid > 0 else L("unlimited")
+    expiry_str = (
+        L("days_fmt", days=days_valid) if days_valid > 0 else L("unlimited")
+    )
 
     return L(
         "create_success",
-        label=label, quota=quota_str, expiry=expiry_str,
-        vless=vless_link, sub=sub_url,
+        label=label,
+        quota=quota_str,
+        expiry=expiry_str,
+        vless=vless_link,
+        sub=sub_url,
     )
+
 
 async def handle_addaddr_command(text: str) -> str:
     parts = text.split()
     if len(parts) < 2:
         return L("addaddr_format")
     addr = parts[1].strip()
-    if not re.match(r'^[a-zA-Z0-9\-_. ]+$', addr):
+    if not re.match(r"^[a-zA-Z0-9\-_. ]+$", addr):
         return L("addaddr_invalid")
     async with CUSTOM_ADDRESSES_LOCK:
         if addr in CUSTOM_ADDRESSES:
@@ -801,6 +977,7 @@ async def handle_addaddr_command(text: str) -> str:
         CUSTOM_ADDRESSES.append(addr)
     save_db()
     return L("addaddr_success", addr=addr)
+
 
 async def handle_toggle_command(text: str, active_state: bool) -> str:
     parts = text.split()
@@ -816,6 +993,7 @@ async def handle_toggle_command(text: str, active_state: bool) -> str:
     state_str = L("state_enabled") if active_state else L("state_disabled")
     return L("toggle_success", name=name, state=state_str)
 
+
 async def handle_reset_command(text: str) -> str:
     parts = text.split()
     if len(parts) < 2:
@@ -828,6 +1006,7 @@ async def handle_reset_command(text: str) -> str:
     save_db()
     return L("reset_success", name=name)
 
+
 async def telegram_notifier_cron():
     while True:
         try:
@@ -839,23 +1018,28 @@ async def telegram_notifier_cron():
 
             async with LINKS_LOCK:
                 items = list(LINKS.items())
-            
+
             for uid, data in items:
                 if not data["active"]:
                     continue
-                
+
                 # Check Quota
                 used = data["used_bytes"]
                 limit = data["limit_bytes"]
                 label = data["label"]
-                
+
                 if limit > 0 and used >= limit:
                     notif_key = f"quota_{uid}"
                     if notif_key not in notified_uids:
-                        msg = L("quota_alert", label=label, used=_fmt_bytes(used), limit=_fmt_bytes(limit))
+                        msg = L(
+                            "quota_alert",
+                            label=label,
+                            used=_fmt_bytes(used),
+                            limit=_fmt_bytes(limit),
+                        )
                         await send_tg_message(msg)
                         notified_uids.add(notif_key)
-                
+
                 # Check Expiry
                 expires_at_str = data.get("expires_at")
                 if expires_at_str:
@@ -863,14 +1047,17 @@ async def telegram_notifier_cron():
                     if exp and exp < datetime.now(timezone.utc):
                         notif_key = f"expiry_{uid}"
                         if notif_key not in notified_uids:
-                            msg = L("expiry_alert", label=label, exp=expires_at_str)
+                            msg = L(
+                                "expiry_alert", label=label, exp=expires_at_str
+                            )
                             await send_tg_message(msg)
                             notified_uids.add(notif_key)
-                            
+
         except Exception as e:
             logger.error(f"Error in notification cron: {e}")
-            
+
         await asyncio.sleep(60)
+
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 @app.get("/")
@@ -881,11 +1068,13 @@ async def root():
     # thing. Return something generic instead.
     return Response(content="OK", media_type="text/plain")
 
+
 @app.get("/health")
 async def health():
     async with connections_lock:
         conn_count = len(connections)
     return {"status": "ok", "connections": conn_count, "uptime": uptime()}
+
 
 @app.post("/api/login")
 async def api_login(request: Request):
@@ -895,8 +1084,16 @@ async def api_login(request: Request):
         raise HTTPException(status_code=401, detail="Invalid password")
     token = await create_session()
     resp = JSONResponse({"ok": True})
-    resp.set_cookie(key=SESSION_COOKIE, value=token, max_age=SESSION_TTL, httponly=True, samesite="lax", path="/")
+    resp.set_cookie(
+        key=SESSION_COOKIE,
+        value=token,
+        max_age=SESSION_TTL,
+        httponly=True,
+        samesite="lax",
+        path="/",
+    )
     return resp
+
 
 @app.post("/api/logout")
 async def api_logout(request: Request):
@@ -906,10 +1103,12 @@ async def api_logout(request: Request):
     resp.delete_cookie(SESSION_COOKIE, path="/")
     return resp
 
+
 @app.get("/api/me")
 async def api_me(request: Request):
     token = request.cookies.get(SESSION_COOKIE)
     return {"authenticated": await is_valid_session(token)}
+
 
 @app.post("/api/change-password")
 async def api_change_password(request: Request, _=Depends(require_auth)):
@@ -917,9 +1116,13 @@ async def api_change_password(request: Request, _=Depends(require_auth)):
     current = str(body.get("current_password") or "")
     new = str(body.get("new_password") or "")
     if hash_password(current) != AUTH["password_hash"]:
-        raise HTTPException(status_code=400, detail="Current password is incorrect")
+        raise HTTPException(
+            status_code=400, detail="Current password is incorrect"
+        )
     if len(new) < 4:
-        raise HTTPException(status_code=400, detail="Password must be at least 4 characters")
+        raise HTTPException(
+            status_code=400, detail="Password must be at least 4 characters"
+        )
     AUTH["password_hash"] = hash_password(new)
     save_db()
     current_token = request.cookies.get(SESSION_COOKIE)
@@ -929,12 +1132,14 @@ async def api_change_password(request: Request, _=Depends(require_auth)):
             SESSIONS[current_token] = time.time() + SESSION_TTL
     return {"ok": True}
 
+
 @app.get("/api/settings")
 async def get_settings(_=Depends(require_auth)):
     return {
         "telegram_token": CONFIG["telegram_token"],
-        "telegram_admin_id": CONFIG["telegram_admin_id"]
+        "telegram_admin_id": CONFIG["telegram_admin_id"],
     }
+
 
 @app.post("/api/settings")
 async def update_settings(request: Request, _=Depends(require_auth)):
@@ -944,6 +1149,7 @@ async def update_settings(request: Request, _=Depends(require_auth)):
     save_db()
     await restart_telegram_bot()
     return {"ok": True}
+
 
 @app.get("/stats")
 async def get_stats(_=Depends(require_auth)):
@@ -964,20 +1170,29 @@ async def get_stats(_=Depends(require_auth)):
         "hourly_traffic": dict(hourly_traffic),
     }
 
+
 @app.post("/api/links")
 async def create_link(request: Request, _=Depends(require_auth)):
     body = await request.json()
     label = (body.get("label") or "New Link").strip()[:60]
-    if not re.match(r'^[a-zA-Z0-9\-_. ]+$', label):
-        raise HTTPException(status_code=400, detail="Inbound name must contain only English letters, numbers, and characters: - _ . space")
+    if not re.match(r"^[a-zA-Z0-9\-_. ]+$", label):
+        raise HTTPException(
+            status_code=400,
+            detail="Inbound name must contain only English letters, numbers, and characters: - _ . space",
+        )
     if not label:
         raise HTTPException(status_code=400, detail="Inbound name is required")
     async with LINKS_LOCK:
         if label in LINKS:
-            raise HTTPException(status_code=400, detail="An inbound with this name already exists")
+            raise HTTPException(
+                status_code=400,
+                detail="An inbound with this name already exists",
+            )
     limit_value = float(body.get("limit_value") or 0)
     limit_unit = body.get("limit_unit") or "GB"
-    limit_bytes = 0 if limit_value <= 0 else parse_size_to_bytes(limit_value, limit_unit)
+    limit_bytes = (
+        0 if limit_value <= 0 else parse_size_to_bytes(limit_value, limit_unit)
+    )
     max_conn = int(body.get("max_connections") or 0)
     if max_conn < 0:
         max_conn = 0
@@ -987,7 +1202,9 @@ async def create_link(request: Request, _=Depends(require_auth)):
         try:
             days_valid = int(days_valid)
             if days_valid > 0:
-                expires_at = (datetime.now(timezone.utc) + timedelta(days=days_valid)).isoformat()
+                expires_at = (
+                    datetime.now(timezone.utc) + timedelta(days=days_valid)
+                ).isoformat()
         except (ValueError, TypeError):
             pass
     uid = label
@@ -1003,11 +1220,19 @@ async def create_link(request: Request, _=Depends(require_auth)):
         }
     save_db()
     return {
-        "uuid": uid, "label": label, "limit_bytes": limit_bytes, "used_bytes": 0,
-        "max_connections": max_conn, "active": True, "created_at": LINKS[uid]["created_at"],
+        "uuid": uid,
+        "label": label,
+        "limit_bytes": limit_bytes,
+        "used_bytes": 0,
+        "max_connections": max_conn,
+        "active": True,
+        "created_at": LINKS[uid]["created_at"],
         "expires_at": expires_at,
-        "vless_link": generate_vless_link(uid, remark=f"Luffy-{label}", port=DEFAULT_PORT),
+        "vless_link": generate_vless_link(
+            uid, remark=f"Luffy-{label}", port=DEFAULT_PORT
+        ),
     }
+
 
 @app.get("/api/links")
 async def list_links(_=Depends(require_auth)):
@@ -1015,20 +1240,25 @@ async def list_links(_=Depends(require_auth)):
     async with LINKS_LOCK:
         items = list(LINKS.items())
     for uid, data in items:
-        result.append({
-            "uuid": uid,
-            "label": data["label"],
-            "limit_bytes": data["limit_bytes"],
-            "used_bytes": data["used_bytes"],
-            "max_connections": data.get("max_connections", 0),
-            "active": data["active"],
-            "created_at": data["created_at"],
-            "expires_at": data.get("expires_at"),
-            "current_connections": await count_connections_for_link(uid),
-            "vless_link": generate_vless_link(uid, remark=f"Luffy-{data['label']}", port=DEFAULT_PORT),
-        })
+        result.append(
+            {
+                "uuid": uid,
+                "label": data["label"],
+                "limit_bytes": data["limit_bytes"],
+                "used_bytes": data["used_bytes"],
+                "max_connections": data.get("max_connections", 0),
+                "active": data["active"],
+                "created_at": data["created_at"],
+                "expires_at": data.get("expires_at"),
+                "current_connections": await count_connections_for_link(uid),
+                "vless_link": generate_vless_link(
+                    uid, remark=f"Luffy-{data['label']}", port=DEFAULT_PORT
+                ),
+            }
+        )
     result.sort(key=lambda x: x["created_at"], reverse=True)
     return {"links": result}
+
 
 @app.patch("/api/links/{uid}")
 async def toggle_link(uid: str, request: Request, _=Depends(require_auth)):
@@ -1041,7 +1271,11 @@ async def toggle_link(uid: str, request: Request, _=Depends(require_auth)):
         if "limit_value" in body:
             limit_value = float(body.get("limit_value") or 0)
             limit_unit = body.get("limit_unit") or "GB"
-            LINKS[uid]["limit_bytes"] = 0 if limit_value <= 0 else parse_size_to_bytes(limit_value, limit_unit)
+            LINKS[uid]["limit_bytes"] = (
+                0
+                if limit_value <= 0
+                else parse_size_to_bytes(limit_value, limit_unit)
+            )
         if "reset_usage" in body and body["reset_usage"]:
             LINKS[uid]["used_bytes"] = 0
         if "label" in body:
@@ -1053,13 +1287,16 @@ async def toggle_link(uid: str, request: Request, _=Depends(require_auth)):
             try:
                 dv = int(body["days_valid"])
                 if dv > 0:
-                    LINKS[uid]["expires_at"] = (datetime.now(timezone.utc) + timedelta(days=dv)).isoformat()
+                    LINKS[uid]["expires_at"] = (
+                        datetime.now(timezone.utc) + timedelta(days=dv)
+                    ).isoformat()
                 else:
                     LINKS[uid]["expires_at"] = None
             except (ValueError, TypeError):
                 pass
     save_db()
     return {"ok": True}
+
 
 @app.delete("/api/links/{uid}")
 async def delete_link(uid: str, _=Depends(require_auth)):
@@ -1069,10 +1306,12 @@ async def delete_link(uid: str, _=Depends(require_auth)):
     await close_connections_for_link(uid)
     return {"ok": True}
 
+
 @app.get("/api/addresses")
 async def list_addresses(_=Depends(require_auth)):
     async with CUSTOM_ADDRESSES_LOCK:
         return {"addresses": list(CUSTOM_ADDRESSES)}
+
 
 @app.post("/api/addresses")
 async def add_address(request: Request, _=Depends(require_auth)):
@@ -1080,14 +1319,20 @@ async def add_address(request: Request, _=Depends(require_auth)):
     address = (body.get("address") or "").strip()
     if not address:
         raise HTTPException(status_code=400, detail="Address is required")
-    if not re.match(r'^[a-zA-Z0-9\-_. ]+$', address):
-        raise HTTPException(status_code=400, detail="Address must contain only English letters, numbers, and characters: - _ .")
+    if not re.match(r"^[a-zA-Z0-9\-_. ]+$", address):
+        raise HTTPException(
+            status_code=400,
+            detail="Address must contain only English letters, numbers, and characters: - _ .",
+        )
     async with CUSTOM_ADDRESSES_LOCK:
         if address in CUSTOM_ADDRESSES:
-            raise HTTPException(status_code=400, detail="Address already exists")
+            raise HTTPException(
+                status_code=400, detail="Address already exists"
+            )
         CUSTOM_ADDRESSES.append(address)
     save_db()
     return {"ok": True, "addresses": list(CUSTOM_ADDRESSES)}
+
 
 @app.delete("/api/addresses")
 async def delete_all_addresses(_=Depends(require_auth)):
@@ -1095,6 +1340,7 @@ async def delete_all_addresses(_=Depends(require_auth)):
         CUSTOM_ADDRESSES.clear()
     save_db()
     return {"ok": True, "addresses": list(CUSTOM_ADDRESSES)}
+
 
 @app.delete("/api/addresses/{index}")
 async def delete_address(index: int, _=Depends(require_auth)):
@@ -1105,6 +1351,7 @@ async def delete_address(index: int, _=Depends(require_auth)):
             raise HTTPException(status_code=404, detail="Address not found")
     save_db()
     return {"ok": True, "addresses": list(CUSTOM_ADDRESSES)}
+
 
 # ── Live Logs WebSocket ───────────────────────────────────────────────────────
 @app.websocket("/ws/live-logs")
@@ -1131,18 +1378,26 @@ async def ws_live_logs(websocket: WebSocket, token: str | None = None):
     except Exception:
         pass
 
+
 # ── Landing Page Generator ────────────────────────────────────────────────────
 def _fmt_bytes(b: int) -> str:
-    if b >= 1_073_741_824: return f"{b / 1_073_741_824:.1f}GB"
-    if b >= 1_048_576: return f"{b / 1_048_576:.1f}MB"
+    if b >= 1_073_741_824:
+        return f"{b / 1_073_741_824:.1f}GB"
+    if b >= 1_048_576:
+        return f"{b / 1_048_576:.1f}MB"
     return f"{b / 1024:.1f}KB"
+
 
 def generate_landing_page(link: dict, uid: str, addresses: list[str]) -> str:
     used = link["used_bytes"]
     limit = link["limit_bytes"]
     expires_at_str = link.get("expires_at")
-    
-    usage_str = f"{_fmt_bytes(used)} / Unlimited" if limit == 0 else f"{_fmt_bytes(used)} / {_fmt_bytes(limit)}"
+
+    usage_str = (
+        f"{_fmt_bytes(used)} / Unlimited"
+        if limit == 0
+        else f"{_fmt_bytes(used)} / {_fmt_bytes(limit)}"
+    )
     pct = round((used / limit) * 100, 1) if limit > 0 else 0
     rem = limit - used if limit > 0 else -1
     rem_str = _fmt_bytes(rem) if rem >= 0 else "Unlimited"
@@ -1157,12 +1412,23 @@ def generate_landing_page(link: dict, uid: str, addresses: list[str]) -> str:
         hours = (secs_left % 86400) // 3600
         expiry_str = f"{days} Days, {hours} Hours Left"
 
-    configs = [generate_vless_link(uid, remark=f"Luffy-{link['label']}", port=DEFAULT_PORT)]
+    configs = [
+        generate_vless_link(
+            uid, remark=f"Luffy-{link['label']}", port=DEFAULT_PORT
+        )
+    ]
     for i, addr in enumerate(addresses):
-        configs.append(generate_vless_link(uid, remark=f"Luffy-{link['label']}-IP{i+1}", address=addr, port=DEFAULT_PORT))
+        configs.append(
+            generate_vless_link(
+                uid,
+                remark=f"Luffy-{link['label']}-IP{i + 1}",
+                address=addr,
+                port=DEFAULT_PORT,
+            )
+        )
 
     configs_json = json.dumps(configs)
-    
+
     html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1301,9 +1567,9 @@ def generate_landing_page(link: dict, uid: str, addresses: list[str]) -> str:
         </div>
         <div class="card">
             <div class="user-header">
-                <span class="username">{link['label']}</span>
-                <span class="status-badge {'status-active' if link['active'] else 'status-expired'}">
-                    {'Active' if link['active'] else 'Inactive'}
+                <span class="username">{link["label"]}</span>
+                <span class="status-badge {"status-active" if link["active"] else "status-expired"}">
+                    {"Active" if link["active"] else "Inactive"}
                 </span>
             </div>
             
@@ -1381,11 +1647,18 @@ def generate_landing_page(link: dict, uid: str, addresses: list[str]) -> str:
 </html>"""
     return html
 
-def generate_subscription_content(link: dict, uid: str, addresses: list[str]) -> str:
+
+def generate_subscription_content(
+    link: dict, uid: str, addresses: list[str]
+) -> str:
     used = link["used_bytes"]
     limit = link["limit_bytes"]
     expires_at_str = link.get("expires_at")
-    usage_str = f"{_fmt_bytes(used)} / ∞" if limit == 0 else f"{_fmt_bytes(used)} / {_fmt_bytes(limit)}"
+    usage_str = (
+        f"{_fmt_bytes(used)} / ∞"
+        if limit == 0
+        else f"{_fmt_bytes(used)} / {_fmt_bytes(limit)}"
+    )
     secs_left = seconds_until_expiry(expires_at_str)
     if secs_left is None:
         expiry_str = "∞"
@@ -1393,15 +1666,32 @@ def generate_subscription_content(link: dict, uid: str, addresses: list[str]) ->
         expiry_str = "Expired"
     else:
         expiry_str = f"{secs_left // 86400} Days Left"
-    
-    status_node = generate_vless_link(uid, remark=f"📊 {usage_str} | ⏳ {expiry_str}", address="0.0.0.0", port=DEFAULT_PORT)
+
+    status_node = generate_vless_link(
+        uid,
+        remark=f"📊 {usage_str} | ⏳ {expiry_str}",
+        address="0.0.0.0",
+        port=DEFAULT_PORT,
+    )
     links_out = [status_node]
-    
-    links_out.append(generate_vless_link(uid, remark=f"Luffy-{link['label']}", port=DEFAULT_PORT))
+
+    links_out.append(
+        generate_vless_link(
+            uid, remark=f"Luffy-{link['label']}", port=DEFAULT_PORT
+        )
+    )
     for i, addr in enumerate(addresses):
-        links_out.append(generate_vless_link(uid, remark=f"Luffy-{link['label']}-IP{i+1}", address=addr, port=DEFAULT_PORT))
-            
+        links_out.append(
+            generate_vless_link(
+                uid,
+                remark=f"Luffy-{link['label']}-IP{i + 1}",
+                address=addr,
+                port=DEFAULT_PORT,
+            )
+        )
+
     return "\n".join(links_out)
+
 
 @app.get("/sub/{uid}")
 async def subscription_endpoint(uid: str, request: Request):
@@ -1410,10 +1700,10 @@ async def subscription_endpoint(uid: str, request: Request):
         if link is None:
             raise HTTPException(status_code=404, detail="link not found")
         link = dict(link)
-        
+
     if not link["active"]:
         raise HTTPException(status_code=403, detail="link disabled")
-        
+
     expires_at = parse_expires_at(link.get("expires_at"))
     if expires_at is not None and expires_at < datetime.now(timezone.utc):
         raise HTTPException(status_code=403, detail="link expired")
@@ -1423,18 +1713,25 @@ async def subscription_endpoint(uid: str, request: Request):
 
     ua = request.headers.get("user-agent", "").lower()
     accept = request.headers.get("accept", "").lower()
-    is_browser = any(x in ua for x in ["mozilla", "chrome", "safari", "opera", "edge"]) and "text/html" in accept
+    is_browser = (
+        any(x in ua for x in ["mozilla", "chrome", "safari", "opera", "edge"])
+        and "text/html" in accept
+    )
 
     if is_browser:
         return HTMLResponse(content=generate_landing_page(link, uid, addresses))
 
     sub_content = generate_subscription_content(link, uid, addresses)
     encoded = base64.b64encode(sub_content.encode()).decode()
-    total_bytes = link["limit_bytes"] if link["limit_bytes"] > 0 else UNLIMITED_QUOTA_BYTES
+    total_bytes = (
+        link["limit_bytes"]
+        if link["limit_bytes"] > 0
+        else UNLIMITED_QUOTA_BYTES
+    )
     expire_ts = 0
     if expires_at is not None:
         expire_ts = int(expires_at.timestamp())
-        
+
     headers = {
         "Content-Type": "text/plain; charset=utf-8",
         "Content-Disposition": 'attachment; filename="sub.txt"',
@@ -1443,8 +1740,10 @@ async def subscription_endpoint(uid: str, request: Request):
     }
     return Response(content=encoded, headers=headers)
 
+
 # ── WebSocket tunnel ──────────────────────────────────────────────────────────
 RELAY_BUF = 64 * 1024
+
 
 async def parse_vless_header(first_chunk: bytes):
     if len(first_chunk) < 24:
@@ -1454,26 +1753,32 @@ async def parse_vless_header(first_chunk: bytes):
     pos += 1 + addon_len
     command = first_chunk[pos]
     pos += 1
-    port = int.from_bytes(first_chunk[pos:pos + 2], "big")
+    port = int.from_bytes(first_chunk[pos : pos + 2], "big")
     pos += 2
     addr_type = first_chunk[pos]
     pos += 1
     if addr_type == 1:
-        addr_bytes = first_chunk[pos:pos + 4]
+        addr_bytes = first_chunk[pos : pos + 4]
         pos += 4
         address = ".".join(str(b) for b in addr_bytes)
     elif addr_type == 2:
         domain_len = first_chunk[pos]
         pos += 1
-        address = first_chunk[pos:pos + domain_len].decode("utf-8", errors="ignore")
+        address = first_chunk[pos : pos + domain_len].decode(
+            "utf-8", errors="ignore"
+        )
         pos += domain_len
     elif addr_type == 3:
-        addr_bytes = first_chunk[pos:pos + 16]
+        addr_bytes = first_chunk[pos : pos + 16]
         pos += 16
-        address = ":".join(f"{addr_bytes[i]:02x}{addr_bytes[i+1]:02x}" for i in range(0, 16, 2))
+        address = ":".join(
+            f"{addr_bytes[i]:02x}{addr_bytes[i + 1]:02x}"
+            for i in range(0, 16, 2)
+        )
     else:
         raise ValueError(f"unknown address type: {addr_type}")
     return command, address, port, first_chunk[pos:]
+
 
 async def check_quota(uid: str, extra_bytes: int) -> bool:
     async with LINKS_LOCK:
@@ -1487,10 +1792,12 @@ async def check_quota(uid: str, extra_bytes: int) -> bool:
             return True
         return (link["used_bytes"] + extra_bytes) <= link["limit_bytes"]
 
+
 async def add_usage(uid: str, n: int):
     async with LINKS_LOCK:
         if uid in LINKS:
             LINKS[uid]["used_bytes"] += n
+
 
 async def ws_to_tcp(websocket, writer, conn_id, link_uid):
     try:
@@ -1511,7 +1818,9 @@ async def ws_to_tcp(websocket, writer, conn_id, link_uid):
                 if conn_id in connections:
                     connections[conn_id]["bytes"] += size
             hourly_traffic[datetime.now(timezone.utc).strftime("%H:00")] += size
-            daily_traffic[datetime.now(timezone.utc).strftime("%Y-%m-%d")] += size
+            daily_traffic[datetime.now(timezone.utc).strftime("%Y-%m-%d")] += (
+                size
+            )
             await add_usage(link_uid, size)
             try:
                 writer.write(data)
@@ -1529,6 +1838,7 @@ async def ws_to_tcp(websocket, writer, conn_id, link_uid):
         except Exception:
             pass
 
+
 async def tcp_to_ws(websocket, reader, conn_id, link_uid):
     first = True
     try:
@@ -1545,15 +1855,20 @@ async def tcp_to_ws(websocket, reader, conn_id, link_uid):
                 if conn_id in connections:
                     connections[conn_id]["bytes"] += size
             hourly_traffic[datetime.now(timezone.utc).strftime("%H:00")] += size
-            daily_traffic[datetime.now(timezone.utc).strftime("%Y-%m-%d")] += size
+            daily_traffic[datetime.now(timezone.utc).strftime("%Y-%m-%d")] += (
+                size
+            )
             await add_usage(link_uid, size)
             try:
-                await websocket.send_bytes((b"\x00\x00" + data) if first else data)
+                await websocket.send_bytes(
+                    (b"\x00\x00" + data) if first else data
+                )
                 first = False
             except Exception:
                 break
     except Exception:
         pass
+
 
 @app.websocket("/ws/{uuid}")
 async def websocket_tunnel(websocket: WebSocket, uuid: str):
@@ -1596,12 +1911,16 @@ async def websocket_tunnel(websocket: WebSocket, uuid: str):
         first_msg = await asyncio.wait_for(websocket.receive(), timeout=15.0)
         if first_msg["type"] == "websocket.disconnect":
             return
-        first_chunk = first_msg.get("bytes") or (first_msg.get("text") or "").encode()
+        first_chunk = (
+            first_msg.get("bytes") or (first_msg.get("text") or "").encode()
+        )
         if not first_chunk:
             return
 
         try:
-            command, address, port, initial_payload = await parse_vless_header(first_chunk)
+            command, address, port, initial_payload = await parse_vless_header(
+                first_chunk
+            )
         except ValueError as e:
             logger.warning(f"Invalid VLESS header: {e}")
             await websocket.close(code=1008, reason="invalid header")
@@ -1610,7 +1929,8 @@ async def websocket_tunnel(websocket: WebSocket, uuid: str):
         conn_id = secrets.token_urlsafe(8)
         async with connections_lock:
             connections[conn_id] = {
-                "uuid": uuid, "ip": client_ip,
+                "uuid": uuid,
+                "ip": client_ip,
                 "connected_at": datetime.now(timezone.utc).isoformat(),
                 "bytes": 0,
             }
@@ -1637,8 +1957,12 @@ async def websocket_tunnel(websocket: WebSocket, uuid: str):
             async with connections_lock:
                 if conn_id in connections:
                     connections[conn_id]["bytes"] += p_size
-            hourly_traffic[datetime.now(timezone.utc).strftime("%H:00")] += p_size
-            daily_traffic[datetime.now(timezone.utc).strftime("%Y-%m-%d")] += p_size
+            hourly_traffic[datetime.now(timezone.utc).strftime("%H:00")] += (
+                p_size
+            )
+            daily_traffic[datetime.now(timezone.utc).strftime("%Y-%m-%d")] += (
+                p_size
+            )
             await add_usage(uuid, p_size)
             try:
                 writer.write(initial_payload)
@@ -1646,9 +1970,15 @@ async def websocket_tunnel(websocket: WebSocket, uuid: str):
             except Exception:
                 pass
 
-        task_up = asyncio.create_task(ws_to_tcp(websocket, writer, conn_id, uuid))
-        task_down = asyncio.create_task(tcp_to_ws(websocket, reader, conn_id, uuid))
-        done, pending = await asyncio.wait({task_up, task_down}, return_when=asyncio.FIRST_COMPLETED)
+        task_up = asyncio.create_task(
+            ws_to_tcp(websocket, writer, conn_id, uuid)
+        )
+        task_down = asyncio.create_task(
+            tcp_to_ws(websocket, reader, conn_id, uuid)
+        )
+        done, pending = await asyncio.wait(
+            {task_up, task_down}, return_when=asyncio.FIRST_COMPLETED
+        )
         for t in pending:
             t.cancel()
             try:
@@ -1660,7 +1990,9 @@ async def websocket_tunnel(websocket: WebSocket, uuid: str):
         pass
     except Exception as exc:
         stats["total_errors"] += 1
-        error_logs.append({"error": str(exc), "time": datetime.now(timezone.utc).isoformat()})
+        error_logs.append(
+            {"error": str(exc), "time": datetime.now(timezone.utc).isoformat()}
+        )
         logger.exception("WebSocket error")
     finally:
         if writer:
@@ -1686,6 +2018,7 @@ async def websocket_tunnel(websocket: WebSocket, uuid: str):
                                 link_ip_map[uid].discard(ip)
                                 if not link_ip_map[uid]:
                                     link_ip_map.pop(uid, None)
+
 
 # ── HTML ──────────────────────────────────────────────────────────────────────
 PANEL_HTML = r"""<!DOCTYPE html>
@@ -2905,17 +3238,21 @@ startPolling();
 </body>
 </html>"""
 
+
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
     return HTMLResponse(content=PANEL_HTML)
+
 
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard_page(request: Request):
     return HTMLResponse(content=PANEL_HTML)
 
+
 @app.get("/panel", response_class=HTMLResponse)
 async def panel_page(request: Request):
     return HTMLResponse(content=PANEL_HTML)
+
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=CONFIG["port"])
