@@ -1,4 +1,5 @@
 import reflex as rx
+import inspect
 from fastapi import FastAPI
 from starlette.types import ASGIApp, Receive, Scope, Send
 from urllib.parse import parse_qsl, urlencode
@@ -7,7 +8,58 @@ import main as panel_module
 from app.luffy_view import luffy_page
 from app.panel_domain import install_domain_ui
 
+
+def repair_outbound_tunnel() -> None:
+    original = panel_module.websocket_tunnel
+    source = inspect.getsource(original)
+    outbound = (
+        "        reader, writer = await asyncio.wait_for(\n"
+        "            asyncio.open_connection(address, port), timeout=10.0\n"
+        "        )\n"
+    )
+    guarded = (
+        "        try:\n"
+        "            reader, writer = await asyncio.wait_for(\n"
+        "                asyncio.open_connection(address, port), timeout=10.0\n"
+        "            )\n"
+        "        except (TimeoutError, OSError) as exc:\n"
+        "            message = (\n"
+        "                'Outbound TCP connection timed out'\n"
+        "                if isinstance(exc, TimeoutError)\n"
+        "                else 'Outbound TCP connection failed'\n"
+        "            )\n"
+        "            stats['total_errors'] += 1\n"
+        "            error_logs.append(\n"
+        "                {'error': message, 'time': datetime.now(timezone.utc).isoformat()}\n"
+        "            )\n"
+        "            logger.warning('%s', message)\n"
+        "            await websocket.close(\n"
+        "                code=1013, reason='destination temporarily unavailable'\n"
+        "            )\n"
+        "            return\n"
+    )
+    if source.count(outbound) != 1:
+        raise RuntimeError("Outbound tunnel connection block not found")
+    source = source.replace(outbound, guarded, 1)
+    source = source[source.index("async def websocket_tunnel(") :]
+    namespace: dict[str, object] = {}
+    exec(
+        compile(source, inspect.getsourcefile(original) or "main.py", "exec"),
+        panel_module.__dict__,
+        namespace,
+    )
+    patched = namespace["websocket_tunnel"]
+    panel_module.websocket_tunnel = patched
+    for route in panel_module.app.router.routes:
+        if getattr(route, "path", None) == "/ws/{uuid}":
+            route.endpoint = patched
+            route.dependant.call = patched
+            return
+    raise RuntimeError("WebSocket tunnel route not found")
+
+
 install_domain_ui()
+repair_outbound_tunnel()
 panel_app = panel_module.app
 
 
@@ -64,5 +116,11 @@ app = rx.App(
     theme=rx.theme(appearance="light"),
     api_transformer=integrate_panel,
 )
-app.add_page(luffy_page, route="/", title="Luffy Panel")
+
+
+def index() -> rx.Component:
+    return luffy_page()
+
+
+app.add_page(index, route="/", title="Luffy Panel")
 app.add_page(luffy_page, route="/luffy", title="Luffy Panel")
