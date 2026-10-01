@@ -1,5 +1,18 @@
 import reflex as rx
 import inspect
+from contextlib import asynccontextmanager
+import starlette.exceptions as starlette_exceptions
+
+# Accommodate mismatched Starlette installations in deployed workers.
+if not hasattr(starlette_exceptions, "StarletteDeprecationWarning"):
+
+    class StarletteDeprecationWarning(DeprecationWarning):
+        pass
+
+    starlette_exceptions.StarletteDeprecationWarning = (
+        StarletteDeprecationWarning
+    )
+
 from fastapi import FastAPI
 from starlette.types import ASGIApp, Receive, Scope, Send
 from urllib.parse import parse_qsl, urlencode
@@ -89,8 +102,15 @@ PANEL_PREFIXES = ("/api/", "/ws/", "/sub/")
 
 
 def integrate_panel(reflex_api: FastAPI) -> ASGIApp:
-    reflex_api.add_event_handler("startup", panel_app.router.startup)
-    reflex_api.add_event_handler("shutdown", panel_app.router.shutdown)
+    reflex_lifespan = reflex_api.router.lifespan_context
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        async with reflex_lifespan(app):
+            async with panel_app.router.lifespan_context(panel_app):
+                yield
+
+    reflex_api.router.lifespan_context = lifespan
 
     async def dispatch(scope: Scope, receive: Receive, send: Send) -> None:
         path = scope.get("path", "")
