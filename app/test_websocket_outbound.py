@@ -56,6 +56,33 @@ def vless_ipv4_header(uid: str, port: int) -> bytes:
     )
 
 
+def test_idle_initial_message_timeout_closes_without_error(
+    isolated_tunnel, tmp_path, caplog
+):
+    uid = isolated_tunnel
+
+    with caplog.at_level(logging.WARNING):
+        with TestClient(integrate_panel(FastAPI())) as client:
+            with client.websocket_connect(f"/ws/{uid}") as websocket:
+                with pytest.raises(WebSocketDisconnect) as closed:
+                    websocket.receive_bytes()
+
+            assert closed.value.code == 1008
+            assert closed.value.reason == "initial message timeout"
+            assert panel.stats["total_errors"] == 0
+            assert not panel.error_logs
+            assert panel.connections == {}
+            assert panel.connection_sockets == {}
+            assert not panel.link_ip_map.get(uid)
+
+    assert not any(
+        record.levelno >= logging.ERROR or record.exc_info
+        for record in caplog.records
+    )
+    assert "Traceback (most recent call last)" not in caplog.text
+    assert not (tmp_path / "panel-test.json").exists()
+
+
 @pytest.mark.parametrize("failure", ["refused", "timeout"])
 def test_outbound_failure_closes_only_tunnel_and_cleans_up(
     isolated_tunnel, monkeypatch, tmp_path, caplog, failure

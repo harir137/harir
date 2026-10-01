@@ -1,5 +1,7 @@
 import reflex as rx
 import secrets
+import time
+from collections import deque
 
 from fastapi import FastAPI
 from starlette.testclient import TestClient
@@ -103,3 +105,43 @@ def test_real_panel_routes() -> None:
             assert client.get("/api/me").json() == {"authenticated": False}
         finally:
             panel_module.AUTH["password_hash"] = password_hash
+
+
+def test_idle_live_logs_socket_does_not_log_expected_timeouts_or_disconnect(
+    monkeypatch, tmp_path, caplog
+) -> None:
+    db_file = tmp_path / "isolated-panel.json"
+    password = secrets.token_urlsafe(24)
+    monkeypatch.setattr(panel_module, "DB_FILE", db_file)
+    monkeypatch.setattr(
+        panel_module,
+        "AUTH",
+        {"password_hash": panel_module.hash_password(password)},
+    )
+    monkeypatch.setattr(panel_module, "SESSIONS", {})
+    monkeypatch.setattr(panel_module, "log_queue", deque(maxlen=150))
+
+    # No lifespan startup: this test exercises login and the routed socket only.
+    client = TestClient(integrate_panel(FastAPI()))
+    try:
+        response = client.post("/api/login", json={"password": password})
+        assert response.status_code == 200
+        assert client.get("/api/me").json() == {"authenticated": True}
+
+        with caplog.at_level(logging.ERROR):
+            caplog.clear()
+            with client.websocket_connect("/ws/live-logs") as websocket:
+                time.sleep(1.1)
+                closed_at = time.monotonic()
+                websocket.close()
+            assert time.monotonic() - closed_at < 1.5
+
+        assert not any(
+            record.levelno >= logging.ERROR or record.exc_info
+            for record in caplog.records
+        )
+        assert "Traceback (most recent call last)" not in caplog.text
+        assert not panel_module.log_queue
+        assert not db_file.exists()
+    finally:
+        client.close()

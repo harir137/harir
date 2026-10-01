@@ -6,12 +6,21 @@ from urllib.parse import parse_qsl, urlencode
 
 import main as panel_module
 from app.luffy_view import luffy_page
+from app.live_logs import install_live_logs
 from app.panel_domain import install_domain_ui
 
 
 def repair_outbound_tunnel() -> None:
     original = panel_module.websocket_tunnel
     source = inspect.getsource(original)
+    first_message = "        first_msg = await asyncio.wait_for(websocket.receive(), timeout=15.0)\n"
+    guarded_first_message = (
+        "        try:\n"
+        "            first_msg = await asyncio.wait_for(websocket.receive(), timeout=15.0)\n"
+        "        except TimeoutError:\n"
+        "            await websocket.close(code=1008, reason='initial message timeout')\n"
+        "            return\n"
+    )
     outbound = (
         "        reader, writer = await asyncio.wait_for(\n"
         "            asyncio.open_connection(address, port), timeout=10.0\n"
@@ -38,8 +47,11 @@ def repair_outbound_tunnel() -> None:
         "            )\n"
         "            return\n"
     )
+    if source.count(first_message) != 1:
+        raise RuntimeError("Initial tunnel message block not found")
     if source.count(outbound) != 1:
         raise RuntimeError("Outbound tunnel connection block not found")
+    source = source.replace(first_message, guarded_first_message, 1)
     source = source.replace(outbound, guarded, 1)
     source = source[source.index("async def websocket_tunnel(") :]
     namespace: dict[str, object] = {}
@@ -60,6 +72,7 @@ def repair_outbound_tunnel() -> None:
 
 install_domain_ui()
 repair_outbound_tunnel()
+install_live_logs()
 panel_app = panel_module.app
 
 
