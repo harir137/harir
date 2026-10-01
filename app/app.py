@@ -1,17 +1,31 @@
 import reflex as rx
+import importlib
 import inspect
 from contextlib import asynccontextmanager
 import starlette.exceptions as starlette_exceptions
+import starlette.types as starlette_types
+import starlette._utils as starlette_utils
 
-# Accommodate mismatched Starlette installations in deployed workers.
-if not hasattr(starlette_exceptions, "StarletteDeprecationWarning"):
+# Refresh stale Starlette modules left loaded after dependency changes.
+for module, symbol in (
+    (starlette_exceptions, "StarletteDeprecationWarning"),
+    (starlette_types, "ExceptionHandler"),
+    (starlette_utils, "get_route_path"),
+):
+    if not hasattr(module, symbol):
+        importlib.reload(module)
 
-    class StarletteDeprecationWarning(DeprecationWarning):
-        pass
+import starlette.middleware as starlette_middleware
 
-    starlette_exceptions.StarletteDeprecationWarning = (
-        StarletteDeprecationWarning
-    )
+# Repair a stale two-field Middleware iterator before FastAPI builds the panel stack.
+if len(tuple(starlette_middleware.Middleware(object))) == 2:
+
+    def compatible_middleware_iter(self):
+        yield self.cls
+        yield getattr(self, "args", ())
+        yield getattr(self, "kwargs", getattr(self, "options", {}))
+
+    starlette_middleware.Middleware.__iter__ = compatible_middleware_iter
 
 from fastapi import FastAPI
 from starlette.types import ASGIApp, Receive, Scope, Send
