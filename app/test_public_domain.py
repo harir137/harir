@@ -7,6 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.app import integrate_panel
+from app.panel_domain import inferred_public_domain, valid_public_domain
 import main as panel
 
 
@@ -27,6 +28,29 @@ def isolated_panel(monkeypatch, tmp_path):
     monkeypatch.setenv("RENDER_EXTERNAL_URL", "https://localhost")
     monkeypatch.delenv("RAILWAY_PUBLIC_DOMAIN", raising=False)
     return tmp_path / "panel-test.json"
+
+
+@pytest.mark.parametrize(
+    ("hostname", "is_valid", "is_inferred"),
+    [
+        ("localhost", True, False),
+        ("panel.example.com", True, True),
+        ("192.168.0.1", True, False),
+        ("8.8.8.8", True, True),
+        ("256.1.2.3", False, False),
+        ("1.2.3.999", False, False),
+    ],
+)
+def test_domain_parsing_does_not_log_expected_address_errors(
+    hostname, is_valid, is_inferred, caplog
+):
+    with caplog.at_level(logging.ERROR):
+        assert valid_public_domain(hostname) is is_valid
+        assert inferred_public_domain(hostname) is is_inferred
+    assert not [
+        record for record in caplog.records if record.levelno >= logging.ERROR
+    ]
+    assert "Traceback" not in caplog.text
 
 
 def test_domain_override_and_legacy_db(isolated_panel, monkeypatch):

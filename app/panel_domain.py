@@ -3,6 +3,7 @@ import ipaddress
 import json
 import logging
 import re
+from contextlib import suppress
 from pathlib import Path
 
 from fastapi import Depends, HTTPException, Request
@@ -53,11 +54,9 @@ def get_domain() -> str:
 def valid_public_domain(domain: object) -> bool:
     if not isinstance(domain, str) or not domain or len(domain) > 253:
         return False
-    try:
+    with suppress(ipaddress.AddressValueError):
         ipaddress.IPv4Address(domain)
         return True
-    except ipaddress.AddressValueError:
-        logging.exception("Unexpected error")
     if re.fullmatch(r"[0-9.]+", domain):
         return False
     return all(
@@ -70,25 +69,23 @@ def valid_public_domain(domain: object) -> bool:
 def inferred_public_domain(hostname: str | None) -> bool:
     if not valid_public_domain(hostname):
         return False
-    try:
+    with suppress(ipaddress.AddressValueError):
         return ipaddress.IPv4Address(hostname).is_global
-    except ipaddress.AddressValueError:
-        logging.exception("Unexpected error")
-        labels = hostname.lower().split(".")
-        return (
-            len(labels) > 1
-            and labels[-1]
-            not in {
-                "localhost",
-                "testserver",
-                "local",
-                "internal",
-                "private",
-                "lan",
-                "localdomain",
-            }
-            and labels[0] not in {"localhost", "testserver"}
-        )
+    labels = hostname.lower().split(".")
+    return (
+        len(labels) > 1
+        and labels[-1]
+        not in {
+            "localhost",
+            "testserver",
+            "local",
+            "internal",
+            "private",
+            "lan",
+            "localdomain",
+        }
+        and labels[0] not in {"localhost", "testserver"}
+    )
 
 
 panel.save_db = save_db
