@@ -1,4 +1,5 @@
 import reflex as rx
+
 import importlib
 import inspect
 from contextlib import asynccontextmanager
@@ -16,18 +17,26 @@ for module, symbol in (
         importlib.reload(module)
 
 import starlette.middleware as starlette_middleware
-
-# Repair a stale two-field Middleware iterator before FastAPI builds the panel stack.
-if len(tuple(starlette_middleware.Middleware(object))) == 2:
-
-    def compatible_middleware_iter(self):
-        yield self.cls
-        yield getattr(self, "args", ())
-        yield getattr(self, "kwargs", getattr(self, "options", {}))
-
-    starlette_middleware.Middleware.__iter__ = compatible_middleware_iter
-
 from fastapi import FastAPI
+import fastapi.applications as fastapi_applications
+import starlette.applications as starlette_applications
+
+
+def compatible_middleware_iter(self):
+    yield self.cls
+    yield getattr(self, "args", ())
+    yield getattr(self, "kwargs", getattr(self, "options", {}))
+
+
+# Reloaded modules can leave FastAPI and Starlette holding distinct Middleware classes.
+for middleware_class in {
+    starlette_middleware.Middleware,
+    starlette_applications.Middleware,
+    fastapi_applications.Middleware,
+}:
+    if len(tuple(middleware_class(object))) == 2:
+        middleware_class.__iter__ = compatible_middleware_iter
+
 from starlette.types import ASGIApp, Receive, Scope, Send
 from urllib.parse import parse_qsl, urlencode
 
@@ -110,30 +119,23 @@ panel_module.PANEL_HTML = panel_module.PANEL_HTML.replace(
     "  if(!isAuthenticated) return;\n  logsWS = new WebSocket(`${protocol}//${location.host}/ws/live-logs`);",
 )
 
-
 PANEL_PATHS = frozenset({"/login", "/dashboard", "/panel", "/health", "/stats"})
 PANEL_PREFIXES = ("/api/", "/ws/", "/sub/")
 
 
-def integrate_panel(reflex_api: FastAPI) -> ASGIApp:
-    reflex_lifespan = reflex_api.router.lifespan_context
+class PanelRoutingMiddleware:
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
 
-    @asynccontextmanager
-    async def lifespan(app: FastAPI):
-        async with reflex_lifespan(app):
-            async with panel_app.router.lifespan_context(panel_app):
-                yield
-
-    reflex_api.router.lifespan_context = lifespan
-
-    async def dispatch(scope: Scope, receive: Receive, send: Send) -> None:
+    async def __call__(
+        self, scope: Scope, receive: Receive, send: Send
+    ) -> None:
         path = scope.get("path", "")
         if scope["type"] in ("http", "websocket") and (
             path in PANEL_PATHS or path.startswith(PANEL_PREFIXES)
         ):
             if scope["type"] == "websocket" and path == "/ws/live-logs":
-                # The panel's WS handler expects a token query parameter. Supply it
-                # from the HttpOnly session cookie without revealing it to scripts.
+                # Pass the HttpOnly session cookie to the panel's socket handler.
                 cookies = dict(
                     item.strip().split("=", 1)
                     for header, value in scope.get("headers", [])
@@ -154,9 +156,21 @@ def integrate_panel(reflex_api: FastAPI) -> ASGIApp:
                     }
             await panel_app(scope, receive, send)
         else:
-            await reflex_api(scope, receive, send)
+            await self.app(scope, receive, send)
 
-    return dispatch
+
+def integrate_panel(reflex_api: FastAPI) -> FastAPI:
+    reflex_lifespan = reflex_api.router.lifespan_context
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        async with reflex_lifespan(app):
+            async with panel_app.router.lifespan_context(panel_app):
+                yield
+
+    reflex_api.router.lifespan_context = lifespan
+    reflex_api.add_middleware(PanelRoutingMiddleware)
+    return reflex_api
 
 
 app = rx.App(
