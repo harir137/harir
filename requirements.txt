@@ -7,3 +7,4 @@ psutil==5.9.6
 reflex[db]==0.9.12
 pyTelegramBotAPI
 pytest
+psycopg[binary]>=3.1.8

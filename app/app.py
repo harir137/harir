@@ -48,6 +48,9 @@ install_admin_inbound(panel_module)
 from app.luffy_view import luffy_page
 from app.live_logs import install_live_logs
 from app.panel_domain import install_domain_ui
+from app.panel_storage import install_panel_storage
+
+install_panel_storage(panel_module)
 
 
 def repair_outbound_tunnel() -> None:

@@ -12,6 +12,15 @@ from app.luffy_view import luffy_page
 import main as panel_module
 import logging
 
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def isolated_panel_file(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        panel_module, "DB_FILE", tmp_path / "panel-integration.json"
+    )
+
 
 def test_root_panel_redirects_to_backend_login() -> None:
     page = luffy_page()
