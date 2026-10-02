@@ -17,7 +17,7 @@ for module, symbol in (
         importlib.reload(module)
 
 import starlette.middleware as starlette_middleware
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 import fastapi.applications as fastapi_applications
 import starlette.applications as starlette_applications
 
@@ -40,7 +40,11 @@ for middleware_class in {
 from starlette.types import ASGIApp, Receive, Scope, Send
 from urllib.parse import parse_qsl, urlencode
 
+from app.admin_inbound import install_admin_inbound
 import main as panel_module
+
+install_admin_inbound(panel_module)
+
 from app.luffy_view import luffy_page
 from app.live_logs import install_live_logs
 from app.panel_domain import install_domain_ui
