@@ -19,9 +19,11 @@ SNAPSHOT_ID = "panel"
 
 @lru_cache(maxsize=1)
 def _engine() -> Engine:
-    url = os.environ.get("REFLEX_DB_URL")
+    url = os.environ.get("REFLEX_DB_URL") or os.environ.get("DATABASE_URL")
     if not url:
-        raise RuntimeError("REFLEX_DB_URL is required for panel persistence")
+        raise RuntimeError(
+            "REFLEX_DB_URL or DATABASE_URL is required for panel persistence"
+        )
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql+psycopg://", 1)
     elif url.startswith("postgresql://"):
@@ -89,14 +91,23 @@ def install_panel_storage(panel: object) -> None:
     def managed_file() -> bool:
         return Path(panel.DB_FILE).resolve() == original_path
 
+    def database_configured() -> bool:
+        return bool(
+            os.environ.get("REFLEX_DB_URL") or os.environ.get("DATABASE_URL")
+        )
+
     def save_db() -> None:
         nonlocal needs_initial_save
         original_save()
-        if not managed_file():
+        if not managed_file() or not database_configured():
             return
         try:
             with Path(panel.DB_FILE).open("r", encoding="utf-8") as file:
                 data = _decode_snapshot(file.read())
+            data["public_domain"] = panel.CONFIG.get("public_domain", "")
+            Path(panel.DB_FILE).write_text(
+                json.dumps(data, indent=4, ensure_ascii=False), encoding="utf-8"
+            )
             # The local JSON retains its legacy shape; only Postgres holds the secret.
             data["secret"] = panel.CONFIG["secret"]
             payload = json.dumps(data, ensure_ascii=False)
@@ -116,8 +127,23 @@ def install_panel_storage(panel: object) -> None:
 
     def load_db() -> None:
         nonlocal needs_initial_save
-        if not managed_file():
+        if not managed_file() or not database_configured():
             original_load()
+            local_path = Path(panel.DB_FILE)
+            if local_path.exists():
+                try:
+                    local_data = _decode_snapshot(
+                        local_path.read_text(encoding="utf-8")
+                    )
+                    saved_domain = local_data.get("public_domain", "")
+                    panel.CONFIG["public_domain"] = (
+                        saved_domain if isinstance(saved_domain, str) else ""
+                    )
+                except (OSError, ValueError, TypeError) as e:
+                    logging.exception(
+                        f"Error: panel local snapshot load failed ({type(e).__name__})"
+                    )
+                    raise
             return
         payload = _read_snapshot()
         if payload is None:
@@ -129,6 +155,9 @@ def install_panel_storage(panel: object) -> None:
             try:
                 payload = local_path.read_text(encoding="utf-8")
                 data = _decode_snapshot(payload)
+                data.setdefault(
+                    "public_domain", panel.CONFIG.get("public_domain", "")
+                )
                 data["secret"] = panel.CONFIG["secret"]
                 # Insert-only: a concurrent startup may already have seeded the row.
                 _write_snapshot(json.dumps(data, ensure_ascii=False), seed=True)
@@ -141,6 +170,10 @@ def install_panel_storage(panel: object) -> None:
                 )
                 raise
         data = _decode_snapshot(payload)
+        saved_domain = data.get("public_domain", "")
+        panel.CONFIG["public_domain"] = (
+            saved_domain if isinstance(saved_domain, str) else ""
+        )
         secret = data.get("secret")
         if secret is not None:
             if not isinstance(secret, str) or not secret:
@@ -176,6 +209,9 @@ def install_panel_storage(panel: object) -> None:
                 f"Error: panel snapshot load failed ({type(e).__name__})"
             )
             raise
+        panel.CONFIG["public_domain"] = (
+            saved_domain if isinstance(saved_domain, str) else ""
+        )
         needs_initial_save = False
 
     async def ensure_default_link() -> None:

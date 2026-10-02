@@ -40,17 +40,13 @@ for middleware_class in {
 from starlette.types import ASGIApp, Receive, Scope, Send
 from urllib.parse import parse_qsl, urlencode
 
-from app.admin_inbound import install_admin_inbound
 import main as panel_module
+from app.panel_bootstrap import install_panel_integrations
 
-install_admin_inbound(panel_module)
+install_panel_integrations(panel_module)
 
 from app.luffy_view import luffy_page
 from app.live_logs import install_live_logs
-from app.panel_domain import install_domain_ui
-from app.panel_storage import install_panel_storage
-
-install_panel_storage(panel_module)
 
 
 def repair_outbound_tunnel() -> None:
@@ -113,7 +109,6 @@ def repair_outbound_tunnel() -> None:
     raise RuntimeError("WebSocket tunnel route not found")
 
 
-install_domain_ui()
 repair_outbound_tunnel()
 install_live_logs()
 panel_app = panel_module.app

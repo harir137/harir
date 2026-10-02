@@ -11,6 +11,8 @@ from app import panel_storage
 
 
 def panel_fixture(tmp_path, monkeypatch):
+    monkeypatch.setenv("REFLEX_DB_URL", "postgresql+psycopg://panel-test")
+    monkeypatch.delenv("DATABASE_URL", raising=False)
     path = tmp_path / "panel_db.json"
     rows = {}
     writes = []
